@@ -83,6 +83,7 @@ colnames(county_sector2)[26] <- "initial.year"
 county_sector2[27] <- rep(NA, length(row.names(county_sector2)))
 colnames(county_sector2)[27] <- "constants"
 
+#combining pre and post 2007 files based on all columns they have in common
 county_sector1 <- rbind(county_sector1, county_sector2[,c(2,4,5,6,14,17,20,23,27,26)])
 
 #in the county_sector raw files, numbers in the thousands include a comma (eg: 1,235)
@@ -94,42 +95,40 @@ county_sector1$expansions <- as.numeric(gsub(",","",county_sector1$expansions,fi
 county_sector1$constants <- as.numeric(gsub(",","",county_sector1$constants,fixed = TRUE))
 
 
+# next we'll add FIP codes to county_sector1
+#fip codes identify state and county 
 
-
+#importing file to merge state/county names with fip codes
 fip.codes <- read.table("georef12fip.txt", header=TRUE, sep = ",")
-#fip.codes1 <- read.table("~/R Stuff/Thesis_data/national_county.txt", header=FALSE, sep = ",")
+
 
 #function to remove the word "county" from our fips code list
+#county_sector 1 county names do not have the word "county"
 removeWords <- function(str, removals) {
   y <- unlist(strsplit(str, " "))
   paste(y[!y %in% removals], collapse=" ")
 }
 
-#create new column with county names excluding word "county"
-#fip.codes1[,6] <- rep(NA,length=length(rownames(fip.codes1)))
-#fip.codes1[,6] <- sapply(levels(fip.codes1$V4)[as.numeric(fip.codes1$V4)],removeWords,removals =c("County"))
+#create new column with upper case county names without the word "county"
 fip.codes[,4] <- sapply(levels(fip.codes$ctyname)[as.numeric(fip.codes$ctyname)],removeWords,removals =c("County,"))
 fip.codes[,4] <- toupper(fip.codes[,4])
+
+#removing commas and apostrophes from county names
 fip.codes[,5] <- gsub(",","",fip.codes[,4],fixed=TRUE)
 fip.codes[,6] <- gsub("'","", fip.codes[,5],fixed=TRUE)
 
 colnames(fip.codes)[6] <- "county.state"
 
-
-#function to extract state name abbreviations when the string has format like "Bibb County, AL". later it will be useful to match state abbreviations to their fip code.
+#function to extract state name abbreviations when the string has format like "Bibb County, AL".
+#later it will be useful to match state abbreviations to their fip code.
 substrRight <- function(x, n){
   substr(x, nchar(x)-n+1, nchar(x))
 }  
-
 fip.codes[,7] <- substrRight(fip.codes[,6],2)
 
 colnames(fip.codes)[7] <- "state_abbrev"
 
-#fip.codes1[,7] <- toupper(fip.codes1[,6])
-#fip.codes1[,8] <- paste(fip.codes1[,7],levels(fip.codes1$V1)[as.numeric(fip.codes1$V1)],sep=", ")
-#fip2 <- fip.codes1[,c(8,2,3)]
-#colnames(fip2) <- c("county.state","state.fip","county,fip")
-
+#preparing county_sector 1 so we can merge it and the fip.codes file
 county_sector1[,11] <- rep(NA,length(rownames(county_sector1)))
 
 county_sector1$state <- toupper(county_sector1$state)
@@ -142,22 +141,16 @@ county_sector1 <- merge(county_sector1, states,all.x = TRUE)
 county_sector1[,11] <- paste(county_sector1$county,county_sector1$state.abb,sep = " ")
 colnames(county_sector1)[11] <- "county.state"
 
+# adding column for difference between estalbishment births and deaths
 county_sector1[,(1+length(colnames(county_sector1)))] <- county_sector1$births - county_sector1$deaths
 colnames(county_sector1)[length(colnames(county_sector1))] <- "net"  
   
-#county_sector1[,12] <- rep(NA,length(rownames(county_sector1)))
-#county_sector1[,12] <- paste(county_sector1$county,county_sector1$state.abb,sep = ", ")
-#colnames(county_sector1)[12] <- "county.state1"
-
-
-#for (i in length(rownames(county_sector1))) {
-# y <- county_sector1$V11[i]
-#  x <- (levels(county_sector1$county)[as.numeric(county_sector1$county)])[i] 
-#  if(!x=="STATE TOTAL") {county_sector1[i,12] <- paste(x,y, sep=", ") }
-#}
-
-#county_sector3 <- merge(county_sector1,fip2,all.x = TRUE)
+#merge fip codes and county names 
 county_sector3 <- merge(county_sector1,fip.codes[,c(1,2,6)], all.x = TRUE)
+
+#unfortunately, ONLY 90% OF COUNTY NAMES IN COUNTY_SECTOR1 MATCHED THE FIP CODES FILE
+
+#the code in comments below shows how I determined 10% was lost
 
 #missing <- c()
 #for (n in 1:length(county_sector3$fipscty)){
@@ -171,7 +164,6 @@ county_sector3 <- merge(county_sector1,fip.codes[,c(1,2,6)], all.x = TRUE)
 #}
 
 #missing.table <- as.data.frame(table(missing.na))
-
 #missing.table5 <- missing.table
 
 
@@ -179,6 +171,12 @@ county_sector3 <- merge(county_sector1,fip.codes[,c(1,2,6)], all.x = TRUE)
 county_sector4 <- merge(county_sector1,fip.codes[,c(1,2,6)])
 
 
+# elections occur the congressional district level, so next we'll merge counties and congressional districts
+
+#district boundaries change every ten years
+#the files below indicate the "old" boundaries from 2002-2010
+#and the "new" boundaries from 2012-
+#we also need the boundaries from 1992-2000, which I haven't found yet
 cdc.old <- read.table("cou_cd109_natl.txt",header=TRUE,sep = ",")
 cdc.new <- read.table("natl_cocd_delimrecent.txt",header=TRUE,sep = ",")
 cdc.old[,4] <- rep("2002-2010",length(rownames(cdc.old))) 
@@ -186,6 +184,11 @@ cdc.new[,4] <- rep("2012-", length(rownames(cdc.new)))
 
 colnames(cdc.old) <- c("fipstate","fipscty","district","period")
 colnames(cdc.new) <- c("fipstate","fipscty","district","period")
+
+#adding columns to create a code which uniquely identifies the folliwng:
+# -> state-county-districts
+# -> state-counties
+# -> state-districts
 
 cdc.old[,5] <- paste(cdc.old$fipstate,cdc.old$fipscty,sep=",")
 cdc.old[,6] <- paste(cdc.old$fipstate,cdc.old$district,sep=",")
@@ -215,28 +218,7 @@ cdc <- rbind(cdc.old,cdc.new)
 cdc[,9] <- paste(cdc$fipstate,cdc$fipscty,cdc$district,sep=",")
 colnames(cdc)[c(1,2,9)] <- c("state.district","state.county","state.county.district")
 
-
-#k <- length(colnames(county_sector4))
-#county_sector4[,(k+1)] <- rep(NA,length(rownames(county_sector4)))
-#colnames(county_sector4)[(k+1)] <- "period" 
-
-#p1 <- as.data.frame(county_sector4$initial.year[(county_sector4$initial.year > 2000) &
-#                                    (county_sector4$initial.year < 2011)])
-
-#p1[,2] <- rep("2002-2010",length(rownames(p1)))
-
-#p2 <- as.data.frame(county_sector4$initial.year[county_sector4$initial.year > 2010])
-#p2[,2] <- rep("2012-",length(rownames(p2)))
-
-#p3 <- as.data.frame(county_sector4$initial.year[county_sector4$initial.year < 2001])
-#p3[,2] <- rep("1992-2000",length(rownames(p3)))
-
-#colnames(p1) <- c("initial.year","period")
-#colnames(p2) <- c("initial.year","period")
-#colnames(p3) <- c("initial.year","period")
-
-#pp <- do.call(rbind, list(p1,p2,p3))
-#pp <- unique(pp)
+#the code below matches a year to its corresponding congressional boundary period
 
 year.period <- as.data.frame(1995:2014)
 year.period[,2] <- rep(NA,20)
@@ -245,9 +227,10 @@ year.period[1:6,2] <- rep("1992-2000",2)
 year.period[7:16,2] <- rep("2002-2010",10)
 year.period[17:20,2] <- rep("2012-",4)
 
+#matching years to their period
 county_sector5 <- merge(county_sector4,year.period,all.x = TRUE)
 
-
+#matching counties to congressional districts (given period)
 county_sector6 <- merge(county_sector5, cdc,
                         by=c("fipstate","fipscty","period"))
 
@@ -260,6 +243,7 @@ county_sector6 <- merge(county_sector5, cdc,
 
 # LOCAL AREA LABOR FORCE STATISTICS
 
+#importing files with unemployment data by county-year
 lau99 <- read.table("laucnty99.csv",sep=",",header=TRUE,stringsAsFactors = FALSE,skip=4)
 lau00 <- read.table("laucnty00.csv",sep=",",header=TRUE,stringsAsFactors = FALSE,skip=4)
 lau01 <- read.table("laucnty01.csv",sep=",",header=TRUE,stringsAsFactors = FALSE,skip=4)
@@ -279,7 +263,6 @@ lau14 <- read.table("laucnty14.csv",sep=",",header=TRUE,stringsAsFactors = FALSE
 lau15 <- read.table("laucnty15.csv",sep=",",header=TRUE,stringsAsFactors = FALSE,skip=4)
 lau16 <- read.table("laucnty16.csv",sep=",",header=TRUE,stringsAsFactors = FALSE,skip=4)
 
-
 lau <- do.call(rbind,
                list(lau99,lau00,lau01,lau02,lau03,lau04,lau05,lau06,lau07,lau08,lau09,lau10,lau11,lau12,lau13,lau14,lau15,lau16))
 
@@ -289,10 +272,7 @@ lau <- lau[,-5]
 
 colnames(lau) <- c("cn.code","fipstate","fipscty","initial.year","labor.force","employed","unemployed","urate")
 
-
-
-#nominate score data
-#data_hall <- read.table("~/R Stuff/Thesis_data/Hall_members.csv", header = TRUE, sep=",")
+# importing nominate score data
 
 #dw-nominate score data
 library(readxl)
