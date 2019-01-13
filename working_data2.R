@@ -1,4 +1,7 @@
 setwd("~/R Stuff/Thesis_Stuff/Thesis_Data")
+library("stargazer", lib.loc="/Library/Frameworks/R.framework/Versions/3.3/Resources/library")
+install.packages("stargazer")
+library(stargazer)
 
 # GOALS OF THIS CODE:
 # assemble all my key data
@@ -457,7 +460,7 @@ library("haven", lib.loc="/Library/Frameworks/R.framework/Versions/3.3/Resources
 library("lfe", lib.loc="/Library/Frameworks/R.framework/Versions/3.3/Resources/library")
 
 #polarization_survey <- read_sav("~/R Stuff/Thesis_data/Polarization-2014/Polarization 2014 public.sav")
-anes_timeseries_cdf <- read_sav("~/R Stuff/Thesis_data/anes_timeseries_cdf.sav")
+anes_timeseries_cdf <- read_sav("anes_timeseries_cdf.sav")
 #anes1 <- as_factor(anes_timeseries_cdf)
 length.anes <- length(colnames(anes_timeseries_cdf))
 
@@ -465,7 +468,7 @@ ideo <- as.factor(anes_timeseries_cdf$VCF0803)
 ideo.scaled <- as.numeric(ideo) - 5
 ideo.abs <- abs(ideo.scaled)
 
-anes_timeseries_cdf[,(1+length.anes)] <- ideo.abs
+
 
 #model1 <- felm(V949 ~ V950 + VCF0114 + VCF0102 + VCF0104 + VCF0105b + VCF0110  | VCF0004 + VCF0901a, data=anes_timeseries_cdf )
 #summary(model1)
@@ -477,6 +480,45 @@ laid.off3 <- as.numeric(levels(laid.off2))[laid.off2]
 
 anes_timeseries_cdf[,(2+length.anes)] <- laid.off1
 
+anes_timeseries_cdf <- cbind(anes_timeseries_cdf,
+                              data.frame(state = anes_timeseries_cdf[,643],
+                                         state.district =
+                                           mapply(paste,
+                                                  anes_timeseries_cdf[,643],
+                                                  anes_timeseries_cdf[,640],
+                                                  MoreArgs = list(sep=","))))
+
+
+
+anes.sample <- anes_timeseries_cdf[c(40000,50000,59940),]
+
+  
+# anes.state.dis <- anes_timeseries_cdf[,c(643,640)]
+# anes.state.dis[,3] <- mapply(paste,
+#                              anes.state.dis[,643],
+#                              anes.state.dis[,640],
+#                              MoreArgs = list(sep=","))
+
+
+#cleaned up version of the ANES survey with all the key variables we need:
+anes.clean.withNAs <- cbind(anes_timeseries_cdf[,which(colnames(anes_timeseries_cdf) %in% list("VCF0004", "VCF0114", "VCF0102", "VCF0104", "VCF0105a", "VCF0110","state.district"))],
+                                         data.frame(state = anes_timeseries_cdf[,643],
+                                                    state.district =
+                                                      mapply(paste,
+                                                             anes_timeseries_cdf[,643],
+                                                             anes_timeseries_cdf[,640],
+                                                             MoreArgs = list(sep=",")),
+                                                    abs.ideo = ideo.abs,
+                                                    if.laidoff = laid.off3))
+                                                 
+colnames(anes.clean.withNAs)[1:6] <- c("year","age.group","gender","race-ethnic.group","education.level","income.group")
+
+anes.clean <- anes.clean.withNAs[!(rowSums(is.na(anes.clean.withNAs))),]
+
+
+
+list("VCF0114", "VCF0102", "VCF0104", "VCF0105a", "VCF0110")
+
 
 anes.data.range <- cbind(cbind(anes_timeseries_cdf[,c(2,949,950)], laid.off2), laid.off3)
 anes.data.range <- anes.data.range[!(rowSums(is.na(anes.data.range))),]
@@ -486,50 +528,82 @@ colnames(anes.data.range) <- c("year","ideo","if.laidoff")
 
 anes.data.range94 <- anes.data.range[which(anes.data.range$year >= 1994),]
 
-key.vars1 <- c("anes.data.range94$ideo",
-               "anes.data.range94$if.laidoff",
-               "dw_nominate$abs.dim1",
-               "mass_layoffs$total",
-               "lau$V10")
+###################################
+
+
+
+rownames(sum.table1) <- c("ideology","recent layoff","absolute nominate score","# mass layoffs","unemployment rate")
+sum.ideo <- anes.data.range94$ideo
+sum.laidoff <- anes.data.range94$if.laidoff
+sum.abs.dim1 <- dw_nominate$abs.dim1
+sum.masslayoffs <- mass_layoffs$total
+sum.urate <- lau$V10[!is.na(lau$V10)]
+sum.total.closures <- county_sector6[which(county_sector6$naics=="--"),11]
+sum.total.net <- county_sector6[which(county_sector6$naics=="--"),16]
+sum.manu.closures <- county_sector6[which(county_sector6$naics=="31-33"),11]
+sum.manu.net <- county_sector6[which(county_sector6$naics=="31-33"),16]
+sum.mine.closures <- county_sector6[which(county_sector6$naics=="21"),11]
+sum.mine.net <- county_sector6[which(county_sector6$naics=="21"),16]
+
+sum.list <- list(sum.ideo,sum.laidoff,sum.abs.dim1,sum.masslayoffs,sum.urate,
+                 sum.total.closures,sum.total.net,sum.manu.closures,sum.manu.net,
+                 sum.mine.closures,sum.mine.net)
 
 
   
-sum.table1 <- data.frame(mean = rep(NA,length(key.vars1)),
-                         SD = rep(NA,length(key.vars1)),
-                         SE = rep(NA,length(key.vars1)),
-                         min = rep(NA,length(key.vars1)),
-                         max = rep(NA,length(key.vars1)))
+  
+sum.table2 <- data.frame(sapply(sum.list, '[', seq(max(sapply(sum.list,length)))))
 
-rownames(sum.table1) <- c("ideology","recent layoff","absolute nominate score","# mass layoffs","unemployment rate")
-sum.table1[1,] <- c(mean(anes.data.range94$ideo),
-                    sd(anes.data.range94$ideo),
-                    sqrt(var(anes.data.range94$ideo)/length(anes.data.range94$ideo)),
-                    min(anes.data.range94$ideo),
-                    max(anes.data.range94$ideo))
+colnames(sum.table2) <- c("Abs. Ideology Score","Recent Layoff","Abs. Nominate Score","# Mass Layoffs","Unemployment Rate",
+                          "Deaths: All Sectors","Net: All Sectors","Deaths: Manufacturing","Net: Manufacturing",
+                          "Deaths: Mining","Net: Mining")
 
-sum.table1[2,] <- c(mean(anes.data.range94$if.laidoff),
-                    sd(anes.data.range94$if.laidoff),
-                    sqrt(var(anes.data.range94$if.laidoff)/length(anes.data.range94$if.laidoff)),
-                    min(anes.data.range94$if.laidoff),
-                    max(anes.data.range94$if.laidoff))
+stargazer(sum.table2,title="Summary Statistics",summary.stat=c("n","mean","sd","min","max"))
 
-sum.table1[3,] <- c(mean(dw_nominate$abs.dim1),
-                    sd(dw_nominate$abs.dim1),
-                    sqrt(var(dw_nominate$abs.dim1)/length(dw_nominate$abs.dim1)),
-                    min(dw_nominate$abs.dim1),
-                    max(dw_nominate$abs.dim1))
 
-sum.table1[4,] <- c(mean(mass_layoffs$total),
-                    sd(mass_layoffs$total),
-                    sqrt(var(mass_layoffs$total)/length(mass_layoffs$total)),
-                    min(mass_layoffs$total),
-                    max(mass_layoffs$total))
+# key.vars1 <- c("anes.data.range94$ideo",
+#                "anes.data.range94$if.laidoff",
+#                "dw_nominate$abs.dim1",
+#                "mass_layoffs$total",
+#                "lau$V10")
+# 
+# 
+#   
+# sum.table1 <- data.frame(mean = rep(NA,length(key.vars1)),
+#                          SD = rep(NA,length(key.vars1)),
+#                          SE = rep(NA,length(key.vars1)),
+#                          min = rep(NA,length(key.vars1)),
+#                          max = rep(NA,length(key.vars1)))
 
-sum.table1[5,] <- c(mean(lau$V10,na.rm = TRUE),
-                    sd(lau$V10,na.rm = TRUE),
-                    sqrt(var(lau$V10,na.rm=TRUE)/length(lau$V10[!is.na(lau$V10)])),
-                    min(lau$V10,na.rm = TRUE),
-                    max(lau$V10,na.rm=TRUE))
+# sum.table1[1,] <- c(mean(anes.data.range94$ideo),
+#                     sd(anes.data.range94$ideo),
+#                     sqrt(var(anes.data.range94$ideo)/length(anes.data.range94$ideo)),
+#                     min(anes.data.range94$ideo),
+#                     max(anes.data.range94$ideo))
+# 
+# sum.table1[2,] <- c(mean(anes.data.range94$if.laidoff),
+#                     sd(anes.data.range94$if.laidoff),
+#                     sqrt(var(anes.data.range94$if.laidoff)/length(anes.data.range94$if.laidoff)),
+#                     min(anes.data.range94$if.laidoff),
+#                     max(anes.data.range94$if.laidoff))
+# 
+# sum.table1[3,] <- c(mean(dw_nominate$abs.dim1),
+#                     sd(dw_nominate$abs.dim1),
+#                     sqrt(var(dw_nominate$abs.dim1)/length(dw_nominate$abs.dim1)),
+#                     min(dw_nominate$abs.dim1),
+#                     max(dw_nominate$abs.dim1))
+# 
+# sum.table1[4,] <- c(mean(mass_layoffs$total),
+#                     sd(mass_layoffs$total),
+#                     sqrt(var(mass_layoffs$total)/length(mass_layoffs$total)),
+#                     min(mass_layoffs$total),
+#                     max(mass_layoffs$total))
+# 
+# sum.table1[5,] <- c(mean(lau$V10,na.rm = TRUE),
+#                     sd(lau$V10,na.rm = TRUE),
+#                     sqrt(var(lau$V10,na.rm=TRUE)/length(lau$V10[!is.na(lau$V10)])),
+#                     min(lau$V10,na.rm = TRUE),
+#                     max(lau$V10,na.rm=TRUE))
 
 
 
@@ -548,4 +622,3 @@ sum.table1[5,] <- c(mean(lau$V10,na.rm = TRUE),
 # net
 # urate
 
-write.table(fip.codes, "~/R Stuff/fip.codes.csv",sep=",")
